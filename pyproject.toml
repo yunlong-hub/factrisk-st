@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factrisk-st"
+version = "0.1.0"
+description = "Number-preservation risk estimation for selective speech translation"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "PyYAML>=6.0",
+  "scipy>=1.11",
+  "scikit-learn>=1.4",
+  "soundfile>=0.12",
+]
+
+[project.optional-dependencies]
+inference = [
+  "librosa>=0.10",
+  "sentencepiece>=0.2",
+  "torch>=2.2",
+  "transformers>=4.45",
+  "accelerate>=1.0",
+]
+dev = ["pytest>=8.0"]
+evaluation = ["sacrebleu>=2.4", "matplotlib>=3.8", "pymupdf>=1.24", "tensorboard>=2.18", "packaging>=24"]
+paper = ["CairoSVG>=2.9", "defusedxml>=0.7", "tinycss2>=1.5", "webencodings>=0.5"]
+
+[project.scripts]
+factrisk-prepare = "factrisk.cli.prepare:main"
+factrisk-import-factst = "factrisk.cli.import_factst:main"
+factrisk-infer = "factrisk.cli.infer:main"
+factrisk-evidence = "factrisk.cli.evidence:main"
+factrisk-features = "factrisk.cli.features:main"
+factrisk-evaluate = "factrisk.cli.evaluate:main"
+factrisk-paper-assets = "factrisk.cli.paper_assets:main"
+factrisk-merge-shards = "factrisk.cli.merge_shards:main"
+factrisk-extension = "factrisk.cli.extension:main"
+factrisk-extension-eval = "factrisk.cli.extension_eval:main"
+factrisk-qe = "factrisk.cli.qe:main"
+factrisk-extension-diagnostics = "factrisk.cli.extension_diagnostics:main"
+factrisk-finalize = "factrisk.cli.finalize:main"
+factrisk-run = "factrisk.pipeline.workflow:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["factrisk*"]
+namespaces = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

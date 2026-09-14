@@ -1,0 +1,56 @@
+project:
+  name: factrisk-st
+  seed: 20260729
+  protocol: engineering_smoke
+  output_dir: /workspace/yunlong/ST/factrisk-st/exp/factrisk/smoke
+  data_dir: /workspace/yunlong/ST/factrisk-st/data/derived/factrisk/smoke
+
+sources:
+  factst_repo: /workspace/yunlong/LLM/fact-st
+  pair_manifest: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/paired_conditions/manifests/tts_tts.jsonl
+  interventions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/evidence_intervention/interventions.jsonl
+  clean_predictions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/paired_conditions/predictions/tts_tts/qwen2_audio.zero_shot.jsonl
+  intervention_predictions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/evidence_intervention/predictions/qwen2_audio.zero_shot.interventions.jsonl
+  audio_roots: [/workspace/yunlong/LLM/fact-st, /workspace]
+  audio_path_rewrites:
+    dataset/st/fact-st/: /workspace/dataset/st/fact-st-old/
+
+data:
+  source_language: de
+  target_language: en
+  fact_types: [number, negation]
+  only_forced_aligned: true
+  limit_pairs: 120
+  split:
+    train: 0.60
+    calibration: 0.20
+    test: 0.20
+    group_key: speaker_id
+    stratify_keys: [fact_type, tts_engine]
+  conditions:
+    - {name: clean, kind: identity, evidence_insufficient: false}
+    - {name: local_mask, kind: factst_key_mask, evidence_insufficient: true}
+    - {name: irrelevant_mask, kind: factst_irrelevant_mask, evidence_insufficient: false}
+  probes: []
+
+models:
+  optional_qe: {enabled: false, score_file: null}
+
+risk:
+  label: severe_fact_error
+  primary_model: logreg_audio_grounded
+  models:
+    - self_consistency
+    - perturbation_only
+    - entailment_only
+    - logreg_audio_grounded
+    - mlp_audio_grounded
+  calibration: platt
+  ece_bins: 10
+  target_coverage: 0.90
+  mark_fraction: 0.15
+  bootstrap_samples: 100
+
+paper:
+  output_dir: /workspace/yunlong/ST/factrisk-st/exp/factrisk/smoke/paper_assets
+  result_snapshot: /workspace/yunlong/ST/factrisk-st/exp/factrisk/smoke/paper_assets/results_snapshot.json

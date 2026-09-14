@@ -1,0 +1,189 @@
+project:
+  name: factrisk-st
+  seed: 20260729
+  protocol: formal
+  output_dir: /workspace/yunlong/ST/factrisk-st/exp/factrisk/baseline
+  data_dir: /workspace/yunlong/ST/factrisk-st/data/derived/factrisk/baseline
+
+sources:
+  factst_repo: /workspace/yunlong/LLM/fact-st
+  pair_manifest: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/paired_conditions/manifests/tts_tts.jsonl
+  interventions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/evidence_intervention/interventions.jsonl
+  clean_predictions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/paired_conditions/predictions/tts_tts/qwen2_audio.zero_shot.jsonl
+  intervention_predictions: /workspace/dataset/st/fact-st-old/de-en/qwen36-35b-a3b_qwen35-35b-a3b/research/evidence_intervention/predictions/qwen2_audio.zero_shot.interventions.jsonl
+  audio_roots:
+    - /workspace/yunlong/LLM/fact-st
+    - /workspace/yunlong/LLM/fact-st-old
+    - /workspace
+  audio_path_rewrites:
+    dataset/st/fact-st/: /workspace/dataset/st/fact-st-old/
+
+data:
+  source_language: de
+  target_language: en
+  fact_types: [number, negation]
+  only_forced_aligned: true
+  limit_pairs: null
+  split:
+    train: 0.60
+    calibration: 0.20
+    test: 0.20
+    group_key: speaker_id
+    stratify_keys: [fact_type, tts_engine]
+  conditions:
+    - name: clean
+      kind: identity
+      evidence_insufficient: false
+    - name: noise_10db
+      kind: gaussian_noise
+      snr_db: 10.0
+      evidence_insufficient: false
+    - name: noise_0db
+      kind: gaussian_noise
+      snr_db: 0.0
+      evidence_insufficient: true
+    - name: truncation
+      kind: truncate_at_slot
+      retain_slot_fraction: 0.35
+      evidence_insufficient: true
+    - name: overlap
+      kind: local_overlap
+      snr_db: 0.0
+      evidence_insufficient: true
+    - name: local_mask
+      kind: factst_key_mask
+      evidence_insufficient: true
+    - name: irrelevant_mask
+      kind: factst_irrelevant_mask
+      evidence_insufficient: false
+  probes:
+    - name: mild_noise_20db
+      kind: gaussian_noise
+      snr_db: 20.0
+    - name: gain_minus_3db
+      kind: gain
+      gain_db: -3.0
+
+models:
+  direct_st:
+    backend: qwen2_audio
+    model_path: /workspace/yunlong/LLM/pretrain_model/ST/Qwen2-Audio-7B-Instruct
+    dtype: bfloat16
+    batch_size: 4
+    max_new_tokens: 192
+    num_beams: 2
+    num_samples: 3
+    sample_temperature: 0.8
+  evidence:
+    backend: whisper_nllb
+    whisper_path: /workspace/yunlong/LLM/pretrain_model/ST/whisper-large-v3
+    nllb_path: /workspace/yunlong/LLM/pretrain_model/ST/nllb-200-distilled-600M
+    dtype: bfloat16
+    batch_size: 24
+    max_new_tokens: 96
+  optional_qe:
+    enabled: true
+    model_path: /workspace/yunlong/ST/factrisk-st/tools/comet-model/wmt20-comet-qe-da/checkpoints/model.ckpt
+    score_file: /workspace/yunlong/ST/factrisk-st/exp/factrisk/baseline/qe/comet_qe.jsonl
+    batch_size: 32
+    chunk_size: 1024
+    num_workers: 4
+  extensions:
+    seamless_m4t:
+      model_path: /workspace/yunlong/LLM/pretrain_model/ST/seamless-m4t-v2-large
+      dtype: bfloat16
+      batch_size: 4
+      max_new_tokens: 192
+    qwen3_omni:
+      model_path: /workspace/yunlong/LLM/pretrain_model/ST/Qwen3-Omni-30B-A3B-Instruct
+      dtype: bfloat16
+      batch_size: 1
+      max_new_tokens: 192
+      attn_implementation: sdpa
+      splits: [test]
+
+risk:
+  label: severe_fact_error
+  feature_groups:
+    text:
+      - sequence_nll
+      - token_entropy
+      - beam_margin_risk
+      - output_length
+    acoustic:
+      - asr_sequence_nll
+      - asr_token_entropy
+      - audio_duration
+      - audio_spectral_entropy
+      - audio_zero_fraction
+      - audio_rms_db
+      - audio_clipping_fraction
+    stability:
+      - perturb_mean_distance
+      - perturb_max_distance
+      - sample_mean_distance
+      - sample_fact_disagreement
+    evidence:
+      - cascade_sequence_nll
+      - evidence_text_distance
+      - evidence_fact_mismatch
+      - evidence_coverage_gap
+  primary_model: interaction_audio_grounded
+  interaction_model:
+    n_estimators: 600
+    min_samples_leaf: 20
+    max_features: 0.7
+    n_jobs: 8
+  model_selection:
+    scope: train_only
+    group_key: speaker_id
+    folds: 5
+    metric: pooled_aurc
+    enforce_primary: true
+    candidates:
+      - logreg_audio_grounded
+      - hgb_audio_grounded
+      - interaction_audio_grounded
+  models:
+    - sequence_probability
+    - token_entropy
+    - beam_margin
+    - asr_confidence
+    - qe
+    - self_consistency
+    - perturbation_only
+    - entailment_only
+    - ablation_text
+    - ablation_text_acoustic
+    - ablation_text_acoustic_stability
+    - logreg_audio_grounded
+    - hgb_audio_grounded
+    - interaction_audio_grounded
+    - mlp_audio_grounded
+  calibration: platt
+  ece_bins: 15
+  target_coverage: 0.90
+  mark_fraction: 0.15
+  bootstrap_samples: 10000
+
+claim_gates:
+  primary_fact_types: [number, negation]
+  target_coverage: 0.90
+  require_complete_conditions:
+    - clean
+    - noise_10db
+    - noise_0db
+    - truncation
+    - overlap
+    - local_mask
+    - irrelevant_mask
+  max_clean_over_abstention: 0.12
+  require_aurc_improvement_over:
+    - sequence_probability
+    - self_consistency
+    - perturbation_only
+  quality_drop_tolerance_chrf: 1.0
+
+paper:
+  output_dir: /workspace/yunlong/ST/factrisk-st/papers/factriskst
+  result_snapshot: /workspace/yunlong/ST/factrisk-st/papers/factriskst/metadata/results_snapshot.json
